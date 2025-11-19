@@ -1,0 +1,269 @@
+openapi: 3.0.3
+info:
+  title: Customer Blocking Service API
+  description: API для управления блокировками клиентов
+  version: 0.0.1
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Dev server
+
+paths:
+  /blockings:
+    post:
+      tags:
+        - Blockings
+      summary: Заблокировать платежи клиента
+      description: Добавляет новую блокировку в список `blockings`
+      operationId: createBlocking
+      security:
+        - bearerAuth: []
+      x-idempotency-key: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/blocking'
+      responses:
+        '201':
+          description: Блокировка успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/blocking'
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        '404':
+          description: Клиент не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+                
+        '409':
+          description: Уже существует блокировка с тем же `Idempotency-Key`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/blocking'
+        
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+      
+    get:
+      tags:
+        - Blockings
+      summary: Поиск и фильтрация блокировок
+      description: Позволяет проверить, заблокирован ли клиент
+      operationId: getBlockings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: client_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фильтр по идентификатору клиента
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Фильтр по статусу
+        - name: block_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+            - fraud_suspicion
+            - incorrect_details
+          description: Фильтр по типу блокировки
+      responses:
+        '200':
+          description: Список блокировок найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/blockings'
+        '400':
+          description: Некорректные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+                
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+  
+  /blockings/{blocking_id}:
+    put:
+      tags:
+        - Blockings
+      summary: Снять или активировать блокировку
+      description: Меняет status на false
+      operationId: liftBlocking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: blocking_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "blocking-12345"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: boolean
+                  description: false — снять блокировку, true — оставить активной
+                  example: false
+      responses:
+        '200':
+          description: Блокировка успешно обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/blocking'
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        '404':
+          description: Блокировка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+    
+    delete:
+      summary: Удаление блокировки по идентификатору
+      description: Удаляет блокировку, если недостаточно смены её статуса
+      tags:
+        - Blockings
+      operationId: deleteBlocking
+      security:
+        - bearerAuth: []
+      parameters:
+          - name: blocking_id
+            in: path
+            required: true
+            description: Идентификатор блокировки
+            schema:
+              type: string
+            example: "blocking-12345"
+      responses:
+        '204':
+          description: Блокировка успешно удалена
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        '404':
+          description: Блокировка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+
+components:
+  schemas:
+    blocking:
+      type: object
+      required:
+        - client_id
+        - block_type
+        - reason
+      properties:
+        blocking_id:
+          type: string
+          description: Уникальный идентификатор блокировки
+          example: "blocking-12345"
+        client_id:
+          type: string
+          description: Уникальный идентификатор клиента
+          example: "client-12345"
+        block_type:
+          enum:
+            - fraud_suspicion
+            - incorrect_details
+          description: Тип блокировки
+          example: "incorrect_details"
+        status:
+          type: boolean
+          description: Активна/неактивна блокировка
+          example: true
+        reason:
+          type: string
+          description: Описание причины блокировки
+          example: "Были введены неверные реквизиты."
+        employee_id:
+          type: string
+          description: Уникальный идентификатор сотрудника создавшего блокировку
+          example: "employee-12345"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-10-25T14:30:00Z"
+  
+    blockings:
+        type: array
+        items:
+          $ref: "#/components/schemas/blocking"
+         
+    error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: Код ошибки
+          example: 404
+        message:
+          type: string
+          description: Описание ошибки
+          example: "Клиент с указанным ID не найден"
+
+  securitySchemes:
+      bearerAuth:
+        type: http
+        scheme: bearer
+        bearerFormat: JWT
